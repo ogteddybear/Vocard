@@ -4,7 +4,7 @@ kill_signal = "SIGTERM"
 kill_timeout = "30s"
 
 [build]
-image = "mongo:8.0"
+dockerfile = "mongodb/Dockerfile"
 
 [env]
 MONGO_INITDB_ROOT_USERNAME = "vocard_admin"
