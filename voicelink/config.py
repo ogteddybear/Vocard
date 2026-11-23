@@ -22,20 +22,25 @@ SOFTWARE.
 """
 
 import os
-
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
+
 from dotenv import load_dotenv
-from typing import (
-    Dict,
-    List,
-    Any,
-    Union,
-    Optional
-)
 
 from .enums import SearchType
 
 load_dotenv()
+
+
+def _env_or_setting(env_name: str, settings: Dict[str, Any], key: str) -> Optional[str]:
+    value = os.getenv(env_name)
+    if value:
+        return value
+    value = settings.get(key)
+    if isinstance(value, str) and value.startswith("YOUR_"):
+        return None
+    return value
+
 
 class Config:
     _instance: Optional['Config'] = None
@@ -43,54 +48,55 @@ class Config:
     LAST_SESSION_FILE_DIR: str = WORKING_DIR / "last-session.json"
 
     def __new__(cls, settings: Dict[str, Any] = None) -> 'Config':
-        """
-        Singleton pattern to ensure only one instance of Config exists.
-        If settings are provided, creates a new instance that replaces the old one.
-        
-        Args:
-            settings (Dict[str, Any], optional): A dictionary containing configuration settings. Defaults to None.
-                                               If provided, creates a new instance that replaces the old one.
-        """
         if settings is not None:
             instance = super(Config, cls).__new__(cls)
             instance.__init__(settings)
             cls._instance = instance
             return instance
-            
         if cls._instance is None:
             cls._instance = super(Config, cls).__new__(cls)
-            
         return cls._instance
 
     def __init__(self, settings: Dict[str, Any] = None) -> None:
-        """
-        Initialize configuration settings. 
-        
-        Args:
-            settings (Dict[str, Any], optional): A dictionary containing configuration settings.
-                                               If None, uses empty dict with default values.
-        """
         if hasattr(self, 'initialized'):
             return
-            
         settings = settings or {}
-        
-        self.token: str = settings.get("token") or os.getenv("TOKEN")
-        self.client_id: int = int(settings.get("client_id", 0)) or int(os.getenv("CLIENT_ID"))
-        self.genius_token: str = settings.get("genius_token") or os.getenv("GENIUS_TOKEN")
-        self.mongodb_url: str = settings.get("mongodb_url") or os.getenv("MONGODB_URL")
-        self.mongodb_name: str = settings.get("mongodb_name") or os.getenv("MONGODB_NAME")
-        
+
+        self.token = os.getenv("DISCORD_TOKEN") or os.getenv("TOKEN") or _env_or_setting("TOKEN", settings, "token")
+        client_id = os.getenv("CLIENT_ID") or settings.get("client_id", 0)
+        try:
+            self.client_id = int(client_id)
+        except (TypeError, ValueError):
+            self.client_id = 0
+
+        self.genius_token = _env_or_setting("GENIUS_TOKEN", settings, "genius_token")
+        self.mongodb_url = os.getenv("MONGODB_URL") or _env_or_setting("MONGODB_URL", settings, "mongodb_url")
+        self.mongodb_name = os.getenv("MONGODB_NAME") or _env_or_setting("MONGODB_NAME", settings, "mongodb_name")
         self.invite_link: str = "https://discord.gg/wRCgB7vBQv"
-        self.nodes: Dict[str, Dict[str, Union[str, int, bool]]] = settings.get("nodes", {})
+
+        self.nodes: Dict[str, Dict[str, Union[str, int, bool]]] = {
+            name: dict(node) for name, node in settings.get("nodes", {}).items()
+        }
+        default_node = self.nodes.setdefault("DEFAULT", {})
+        if os.getenv("LAVALINK_HOST"):
+            default_node["host"] = os.getenv("LAVALINK_HOST")
+        if os.getenv("LAVALINK_PORT"):
+            default_node["port"] = int(os.getenv("LAVALINK_PORT"))
+        if os.getenv("LAVALINK_SERVER_PASSWORD"):
+            default_node["password"] = os.getenv("LAVALINK_SERVER_PASSWORD")
+        elif os.getenv("LAVALINK_PASSWORD"):
+            default_node["password"] = os.getenv("LAVALINK_PASSWORD")
+        if os.getenv("LAVALINK_SECURE"):
+            default_node["secure"] = os.getenv("LAVALINK_SECURE", "false").lower() in ("1", "true", "yes")
+
         self.max_queue: int = settings.get("default_max_queue", 1000)
         self.search_platform: SearchType = SearchType.from_platform(settings.get("default_search_platform", "youtube")) or SearchType.YOUTUBE
         self.bot_prefix: str = settings.get("prefix", "")
         self.activity: List[Dict[str, str]] = settings.get("activity", [{"listen": "/help"}])
-        self.logging: Dict[Union[str, Dict[str, Union[str, bool]]]] = settings.get("logging", {})
-        self.embed_color: str = int(settings.get("embed_color", "0xb3b3b3"), 16)
+        self.logging: Dict[str, Any] = settings.get("logging", {})
+        self.embed_color: int = int(settings.get("embed_color", "0xb3b3b3"), 16)
         self.bot_access_user: List[int] = settings.get("bot_access_user", [])
-        self.sources_settings: Dict[Dict[str, str]] = settings.get("sources_settings", {})
+        self.sources_settings: Dict[str, Dict[str, str]] = settings.get("sources_settings", {})
         self.cooldowns_settings: Dict[str, List[int]] = settings.get("cooldowns", {})
         self.aliases_settings: Dict[str, List[str]] = settings.get("aliases", {})
         self.controller: Dict[str, Dict[str, Any]] = settings.get("default_controller", {})
@@ -100,39 +106,23 @@ class Config:
         self.playlist_settings: Dict[str, Union[str, int]] = settings.get("playlist_settings", {})
         self.timer_settings: Dict[str, int] = settings.get("timer_settings", {})
         self.version: str = settings.get("version", "")
-        
         self.initialized = True
-    
+
     @classmethod
     def get_source_config(cls, source: str, type: str) -> Union[str, None]:
-        """
-        Get source configuration for a specific source and type.
-        
-        Args:
-            source (str): The source identifier (e.g., 'youtube', 'spotify').
-                            Case-insensitive and spaces are removed.
-            type (str): The type of configuration to retrieve (e.g., 'emoji', 'color').
-        
-        Returns:
-            Union[str, None]: The configuration value for the specified source and type.
-                            Returns None if either the source or type doesn't exist.
-        
-        Example:
-            >>> Config().get_source("youtube", "emoji")
-            "🎵"
-        """
         if not isinstance(source, str) or not isinstance(type, str):
             return None
-            
-        normalized_source: str = source.lower().strip().replace(" ", "")
-        source_settings: dict[str, str] = cls._instance.sources_settings.get(
-            normalized_source,
-            cls._instance.sources_settings.get("others", {})
+        normalized_source = source.lower().strip().replace(" ", "")
+        source_settings = cls._instance.sources_settings.get(
+            normalized_source, cls._instance.sources_settings.get("others", {})
         )
-        
         return source_settings.get(type)
-    
+
     @classmethod
     def get_playlist_config(cls) -> tuple[int, int, str]:
         config = cls._instance.playlist_settings
-        return config.get("max_playlists", 5), config.get("max_tracks_per_playlist", 500), config.get("default_playlist_name", "Favourite")
+        return (
+            config.get("max_playlists", 5),
+            config.get("max_tracks_per_playlist", 500),
+            config.get("default_playlist_name", "Favourite"),
+        )
