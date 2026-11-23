@@ -1,0 +1,16 @@
+app = "vocard-bot"
+primary_region = "syd"
+kill_signal = "SIGINT"
+kill_timeout = "30s"
+
+[build]
+dockerfile = "Dockerfile"
+
+[processes]
+app = "python -u main.py"
+
+# This Discord worker has no inbound HTTP listener or public service.
+# Fly machine count is controlled in the dashboard; create and keep exactly one.
+[[vm]]
+size = "shared-cpu-1x"
+memory = "512mb"
