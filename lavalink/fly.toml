@@ -1,0 +1,18 @@
+app = "vocard-lavalink"
+primary_region = "syd"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+image = "ghcr.io/lavalink-devs/lavalink:4-alpine"
+
+[env]
+SERVER_ADDRESS = "0.0.0.0"
+SERVER_PORT = "2333"
+JAVA_TOOL_OPTIONS = "-Xms256m -Xmx768m -XX:MaxMetaspaceSize=256m"
+
+# Private Lavalink node: no [services] section means no public port.
+# Keep exactly one machine in this app.
+[[vm]]
+size = "shared-cpu-1x"
+memory = "1gb"
