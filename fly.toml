@@ -1,7 +1,12 @@
+# fly.toml app configuration file generated for vocard-bot on 2026-11-23T17:23:46Z
+#
+# See https://docs.fly.io/reference/configuration for information about how to use this file.
+#
+
 app = "vocard-bot"
-primary_region = "sin"
-kill_signal = "SIGINT"
-kill_timeout = "30s"
+primary_region = 'sin'
+kill_signal = 'SIGINT'
+kill_timeout = '30s'
 
 [build]
 dockerfile = "Dockerfile"
@@ -13,10 +18,16 @@ LAVALINK_PORT = "2333"
 LAVALINK_SECURE = "false"
 
 [processes]
-app = "python -u main.py"
+  app = 'python -u main.py'
 
-# This Discord worker has no inbound HTTP listener or public service.
-# Fly machine count is controlled in the dashboard; create and keep exactly one.
 [[vm]]
-size = "shared-cpu-1x"
-memory = "512mb"
+  size = 'shared-cpu-1x'
+  memory = '512mb'
+
+[http_service]
+  auto_start_machines = true
+  auto_stop_machines = 'off'
+  force_https = true
+  internal_port = 8080
+  min_machines_running = 1
+  processes = ['app']
